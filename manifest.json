@@ -1,16 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "AGI Sentinel Ultra",
-  "version": "3.0",
-  "permissions": ["storage", "activeTab", "scripting"],
-  "host_permissions": ["*://*/*"],
+  "name": "AGI Sentinel Pro",
+  "version": "4.0",
+  "description": "Professional Grade AI Security Shield",
+  "permissions": ["storage", "declarativeNetRequest", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "run_at": "document_start",
-      "all_frames": true
+      "run_at": "document_start"
     }
-  ],
-  "action": {}
+  ]
 }
