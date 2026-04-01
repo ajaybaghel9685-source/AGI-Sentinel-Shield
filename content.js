@@ -1,60 +1,92 @@
-// AGI-SENTINEL-ULTRA: THE MASTER CONTROLLER
+// AGI-SENTINEL-ULTRA: THE HELMET ARMOR EDITION
 (function() {
-    // 1. ADVANCED UI OVERLAY (The Scanning Matrix)
-    const overlay = document.createElement('div');
-    overlay.id = "sentinel-master-ui";
-    overlay.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,10,20,0.95);color:#00ffcc;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000000;font-family:'Courier New', monospace;transition:all 0.8s ease-in-out;";
-    overlay.innerHTML = `
-        <div style="border:2px solid #00ffcc; padding:40px; border-radius:15px; box-shadow: 0 0 20px #00ffcc; text-align:center;">
-            <h1 style="letter-spacing:5px; margin-bottom:10px;">AGI SENTINEL v2.0</h1>
-            <p id="st-text" style="font-size:14px; color:#55ffcc;">RE-WRITING PAGE ARCHITECTURE...</p>
-            <div style="width:250px; background:#111; height:4px; margin-top:20px; border-radius:10px; overflow:hidden;">
-                <div id="st-bar" style="width:0%; height:100%; background:#00ffcc; box-shadow:0 0 10px #00ffcc;"></div>
-            </div>
-        </div>
-    `;
-    document.documentElement.appendChild(overlay);
-
-    // Progress Animation
-    let p = 0;
-    const inv = setInterval(() => {
-        p += 5;
-        document.getElementById('st-bar').style.width = p + "%";
-        if(p == 30) document.getElementById('st-text').innerText = "INJECTING SECURE CSS...";
-        if(p == 60) document.getElementById('st-text').innerText = "ENCRYPTING ALL DATA INPUTS...";
-        if(p == 90) document.getElementById('st-text').innerText = "MASTER CONTROL READY.";
-        
-        if(p >= 100) {
-            clearInterval(inv);
-            overlay.style.opacity = '0';
-            setTimeout(() => overlay.remove(), 800);
-            applyMasterChanges(); // जादू शुरू!
+    // 1. HELMET ARMOR ENGINE (Favicon change karne ke liye)
+    function applyHelmetArmor() {
+        // Purane favicon ko dhoondo
+        let link = document.querySelector("link[rel~='icon']");
+        if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.getElementsByTagName('head')[0].appendChild(link);
         }
-    }, 100);
 
-    // 2. THE TRANSFORMATION ENGINE (यहीं से वेबसाइट बदल जाएगी)
-    function applyMasterChanges() {
-        // A. DARK MATRIX THEME (पूरी साइट को कूल डार्क मोड देना)
-        const style = document.createElement('style');
-        style.innerHTML = `
-            * { border-color: #00ffcc !important; }
-            body { background-color: #0a0a0a !important; color: #e0e0e0 !important; }
-            a { color: #00ffcc !important; text-decoration: none !important; }
-            img { filter: contrast(1.1) brightness(0.9) !important; border-radius: 8px; }
-        `;
-        document.head.appendChild(style);
+        // Helmet Icon ka Canvas base (Ye website ke icon ke upar shield banayega)
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
 
-        // B. LANGUAGE ENHANCER (साइट के शब्दों को बदलना)
-        // यह उदाहरण के लिए 'Sign In' को 'Secure Access' में बदल देगा
-        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-        let node;
-        while(node = walker.nextNode()) {
-            let text = node.nodeValue;
-            // यहाँ आप जो चाहें वो शब्द बदल सकते हैं
-            text = text.replace(/Sign in/gi, '🛡️ SECURE ENTRY');
-            text = text.replace(/Login/gi, '🛡️ SENTINEL LOGIN');
-            text = text.replace(/Search/gi, '🔍 SCAN DATABASE');
-            node.nodeValue = text;
-        }
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = link.href;
+
+        img.onload = function() {
+            // Asli logo draw karo
+            ctx.drawImage(img, 0, 0, 32, 32);
+            
+            // Uske upar "AGI HELMET" (Blue/Green Shield Overlay)
+            ctx.strokeStyle = "#00ffcc";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(16, 16, 14, 0, Math.PI * 2); // Bahari Kawach
+            ctx.stroke();
+            
+            // Ek chota chamakta hua dot (Active Signal)
+            ctx.fillStyle = "#00ffcc";
+            ctx.beginPath();
+            ctx.arc(26, 6, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            link.href = canvas.toDataURL("image/x-icon");
+        };
     }
+
+    // 2. DIVINE ANIMATED GUARDS (Trishul & Snake)
+    const styleSheet = document.createElement('style');
+    styleSheet.innerHTML = `
+        @keyframes snakeMove { 0% { background-position: 0 0; } 100% { background-position: 0 1000px; } }
+        @keyframes glowTrishul { 0%, 100% { filter: drop-shadow(0 0 5px #00ffcc); transform: scale(1); } 50% { filter: drop-shadow(0 0 15px #00ffcc); transform: scale(1.1); } }
+        .sentinel-guard {
+            position: fixed; top: 0; height: 100%; width: 50px; 
+            background: #000; z-index: 999999; display: flex; 
+            flex-direction: column; align-items: center; justify-content: space-around;
+            border-left: 2px solid #00ffcc; border-right: 2px solid #00ffcc;
+            animation: snakeMove 15s linear infinite;
+            background-image: repeating-linear-gradient(45deg, #001a14 0, #001a14 10px, #000 10px, #000 20px);
+        }
+        .trishul { animation: glowTrishul 2s infinite; fill: #00ffcc; width: 35px; }
+        body { margin: 0 60px !important; background: #000 !important; color: #00ffcc !important; }
+    `;
+    document.head.appendChild(styleSheet);
+
+    const trishulIcon = `<svg class="trishul" viewbox="0 0 24 24"><path d="M12 2l1.5 4h-3L12 2zm0 20v-9m-4-2c0-3 4-5 4-5s4 2 4 5m-8 0h8M8 11c0 2 2 3 2 3m4-3c0 2-2 3-2 3"/></svg>`;
+    
+    const leftG = document.createElement('div'); leftG.className = 'sentinel-guard'; leftG.style.left = '0';
+    const rightG = document.createElement('div'); rightG.className = 'sentinel-guard'; rightG.style.right = '0';
+    leftG.innerHTML = rightG.innerHTML = `<span>🐍</span>${trishulIcon}${trishulIcon}<span>🐍</span>`;
+    
+    document.documentElement.appendChild(leftG);
+    document.documentElement.appendChild(rightG);
+
+    // 3. VOICE & ACTIVATION
+    function speak(txt) {
+        const s = new SpeechSynthesisUtterance(txt);
+        s.lang = 'hi-IN'; s.rate = 0.8;
+        window.speechSynthesis.speak(s);
+    }
+
+    // Website khulte hi Helmet Armor aur Voice active karein
+    applyHelmetArmor();
+    speak("एजीआई हेलमेट कवच सक्रिय है। आपकी वेबसाइट अब पूरी तरह सुरक्षित है।");
+
+    // Scanning Overlay
+    const ov = document.createElement('div');
+    ov.style = "position:fixed;top:0;left:0;width:100%;height:100%;background:#000;color:#00ffcc;z-index:1000001;display:flex;align-items:center;justify-content:center;font-family:monospace;";
+    ov.innerHTML = "<h1>[ ARMORING INTERFACE... ]</h1>";
+    document.documentElement.appendChild(ov);
+
+    setTimeout(() => {
+        ov.style.opacity = '0';
+        setTimeout(() => ov.remove(), 1000);
+    }, 2000);
 })();
