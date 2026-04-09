@@ -1,2 +1,4 @@
 smartapi-python
 google-generativeai
+logzero
+
