@@ -1,3 +1,6 @@
 smartapi-python
 google-generativeai
 logzero
+websocket-client
+pyotp
+requests
