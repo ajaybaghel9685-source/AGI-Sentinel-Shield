@@ -4,3 +4,4 @@ logzero
 websocket-client
 pyotp
 requests
+pyTelegramBotAPI
