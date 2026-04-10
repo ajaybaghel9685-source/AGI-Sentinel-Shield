@@ -1,13 +1,31 @@
-import os
+       import os
 import time
 import pyotp
 import telebot
+import threading
 from logzero import logger
+from flask import Flask
 from SmartApi import SmartConnect
 import google.generativeai as genai
 
 # ==========================================
-# 🎯 1. HARDCODED & ENV CONFIGURATION
+# 🌐 1. FLASK WEB SERVER (To Satisfy Railway)
+# ==========================================
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Hanuman Matrix Bot is LIVE and running autonomously! 🚀"
+
+def run_web_server():
+    """Railway requires an active port to keep the container alive."""
+    port = int(os.environ.get("PORT", 8080)) # Railway auto-assigns PORT
+    logger.info(f"🌐 Starting Dummy Web Server on port {port}...")
+    # use_reloader=False prevents Flask from starting twice in threads
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+
+# ==========================================
+# 🎯 2. HARDCODED & ENV CONFIGURATION
 # ==========================================
 TELEGRAM_CHAT_ID = 9685474533
 
@@ -24,38 +42,32 @@ if GEMINI_KEY:
 smartApi = None
 
 # ==========================================
-# 🤖 2. BOT INITIALIZATION & VERIFICATION
+# 🤖 3. BOT INITIALIZATION
 # ==========================================
 try:
     print("⏳ Checking Token...")
-    # FIX 1: threaded=False to prevent conflicts on Railway's small containers
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False)
-    
-    # FIX 3: Verify if the new token is actually working
+    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False) # RAM Saver!
     bot_info = bot.get_me()
     print(f"✅ Token Verified! Bot info: {bot_info.first_name} (@{bot_info.username})")
 except Exception as e:
-    logger.error(f"❌ CRITICAL: Failed to authenticate Bot Token. Check your TELEGRAM_BOT_TOKEN. Error: {e}")
-    # We don't exit here so the container stays alive to show the log.
+    logger.error(f"❌ CRITICAL: Failed to authenticate Bot Token. Error: {e}")
     bot = None
 
 # ==========================================
-# 🛡️ 3. SAFE TELEGRAM SENDER
+# 🛡️ 4. SAFE TELEGRAM SENDER
 # ==========================================
 def safe_send_message(text):
     if not bot:
         return
-    # FIX 2: try-except block around send_message to prevent crashes
     try:
         bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode='HTML')
     except telebot.apihelper.ApiTelegramException as e:
-        logger.error(f"⚠️ Telegram API Error (Code: {e.error_code}): {e.description}")
-        logger.warning(f"Failed to send message to Chat ID: {TELEGRAM_CHAT_ID}. Please send /start to the bot.")
+        logger.error(f"⚠️ Telegram API Error: {e.description}")
     except Exception as e:
         logger.error(f"⚠️ Unknown error while sending message: {e}")
 
 # ==========================================
-# 🔐 4. ANGEL ONE LOGIN ENGINE
+# 🔐 5. ANGEL ONE LOGIN ENGINE
 # ==========================================
 def login_angel_one(silent=False):
     global smartApi
@@ -83,14 +95,12 @@ def login_angel_one(silent=False):
         return False
 
 # ==========================================
-# ⚡ 5. TELEGRAM COMMANDS
+# ⚡ 6. TELEGRAM COMMANDS
 # ==========================================
-# We must ensure 'bot' exists before registering handlers
 if bot:
     @bot.message_handler(commands=['start', 'ping'])
     def check_visibility(message):
-        if message.chat.id != TELEGRAM_CHAT_ID: 
-            return
+        if message.chat.id != TELEGRAM_CHAT_ID: return
         bot.reply_to(message, "✅ <b>I CAN SEE YOU BOSS!</b> Connection is Solid.", parse_mode='HTML')
 
     @bot.message_handler(commands=['login'])
@@ -100,28 +110,44 @@ if bot:
         login_angel_one(silent=False)
 
 # ==========================================
-# 🚀 6. KICKSTART & IMMORTALITY LOOP
+# 🔄 7. KEEP-ALIVE LOGGER
+# ==========================================
+def keep_alive_logger():
+    """Prints a log every 30 seconds to show Railway that the process is active."""
+    while True:
+        logger.info("⚡ Bot is active and listening for market triggers...")
+        time.sleep(30)
+
+# ==========================================
+# 🚀 8. KICKSTART & IMMORTALITY LOOP
 # ==========================================
 if __name__ == "__main__":
     logger.info("⚡ Booting Hanuman Matrix Bot...")
-    
-    # Silent Boot
+
+    # A) Start Flask Web Server in a background Daemon Thread
+    # Daemon thread ensures it stops when the main program stops
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
+
+    # B) Start Keep-Alive Logger in background
+    logger_thread = threading.Thread(target=keep_alive_logger, daemon=True)
+    logger_thread.start()
+
+    # C) Silent Angel One Boot
     login_angel_one(silent=True)
     
     logger.info("📡 Starting Telegram Polling (Infinity Mode)...")
     
-    # IMMORTALITY LOOP
+    # D) THE IMMORTALITY LOOP
     while True:
         try:
             if bot:
-                # infinity_polling works even with threaded=False
                 bot.infinity_polling(timeout=10, long_polling_timeout=5)
             else:
-                logger.error("Bot is not initialized. Cannot start polling.")
-                time.sleep(30) # Wait longer if token is entirely invalid
+                logger.error("Bot is not initialized. Waiting...")
+                time.sleep(30)
         except Exception as e:
             logger.error(f"🚨 Polling Exception: {e}")
             logger.info("🔄 Rebooting polling sequence in 10 seconds...")
             
-        # CPU Breather
-        time.sleep(10)
+        time.sleep(10) # CPU Breather         
