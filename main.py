@@ -24,8 +24,7 @@ def run_web_server():
 # ==========================================
 # 🎯 2. CONFIGURATION
 # ==========================================
-# Yahan apni purani ID rehne dein, niche code ise verify karega
-TELEGRAM_CHAT_ID = 6119855904 
+TELEGRAM_CHAT_ID = 6119855904 # Aapki sahi ID
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY", "").strip()
@@ -34,8 +33,10 @@ ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD", "").strip()
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "").strip()
 GEMINI_KEY = os.environ.get("GEMINI_KEY", "").strip()
 
+# Gemini Setup
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
+    model = genai.GenerativeModel('gemini-pro')
 
 smartApi = None
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False)
@@ -45,10 +46,9 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False)
 # ==========================================
 def safe_send_message(text):
     try:
-        # Hum try karenge aapki hardcoded ID par bhejne ka
         bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode='HTML')
-    except:
-        logger.error("Could not send automated message. Check Chat ID.")
+    except Exception as e:
+        logger.error(f"Telegram error: {e}")
 
 # ==========================================
 # 🔐 5. ANGEL ONE LOGIN
@@ -66,29 +66,47 @@ def login_angel_one(silent=False):
             
         logger.info("✅ Angel One Login Successful!")
         if not silent:
-            safe_send_message("🟢 <b>SYSTEM ONLINE:</b> Angel One Login Successful!")
+            safe_send_message("🟢 <b>SYSTEM ONLINE:</b> Angel One Login Ho Gaya Hai!")
         return True
     except Exception as e:
         logger.error(f"❌ LOGIN FAILED: {e}")
         return False
 
 # ==========================================
-# ⚡ 6. TELEGRAM COMMANDS (FIXED)
+# ⚡ 6. HINDI AI & COMMAND HANDLING
 # ==========================================
-@bot.message_handler(commands=['start', 'ping'])
-def check_visibility(message):
-    # Ye line aapko aapki sahi Chat ID batayegi
-    user_id = message.chat.id
-    response = f"✅ <b>I CAN SEE YOU!</b>\n\nAapki Chat ID hai: <code>{user_id}</code>\n\nIse code mein TELEGRAM_CHAT_ID ki jagah update karein."
-    bot.reply_to(message, response, parse_mode='HTML')
 
-@bot.message_handler(commands=['login'])
-def retry_login(message):
-    if message.chat.id == TELEGRAM_CHAT_ID:
-        bot.reply_to(message, "🔄 Retrying Angel One Login...")
-        login_angel_one(silent=False)
+@bot.message_handler(func=lambda message: True)
+def handle_hindi_ai(message):
+    # Sirf aapki ID se baat karega
+    if message.chat.id != TELEGRAM_CHAT_ID:
+        return
+
+    user_text = message.text.lower()
+
+    # 1. Trading Commands (Hindi Keywords)
+    if any(word in user_text for word in ["login", "jodo", "connect", "shuru karo"]):
+        bot.reply_to(message, "Theek hai, Angel One se connect kar raha hoon...")
+        login_angel_one()
+
+    elif any(word in user_text for word in ["status", "kaise ho", "chal raha hai"]):
+        bot.reply_to(message, "System ekdum mast chal raha hai, Boss! Market par nazar hai. 🚀")
+
+    elif any(word in user_text for word in ["ping", "zinda ho"]):
+        bot.reply_to(message, "✅ Ji Boss! I CAN SEE YOU!")
+
+    # 2. General AI Chat (Gemini)
     else:
-        bot.reply_to(message, f"❌ Unauthorized! ID: {message.chat.id}")
+        try:
+            if GEMINI_KEY:
+                # Bot ko instruction ki wo Hindi mein hi jawab de
+                prompt = f"User says: {message.text}. Respond as a helpful trading assistant in simple Hindi."
+                response = model.generate_content(prompt)
+                bot.reply_to(message, response.text)
+            else:
+                bot.reply_to(message, "Aapka message mila, par AI key nahi hai isliye main sirf trading commands samajh sakta hoon.")
+        except Exception as e:
+            bot.reply_to(message, "Maaf kijiyega, kuch technical dikkat aa gayi hai.")
 
 # ==========================================
 # 🚀 8. MAIN LOOP
@@ -98,4 +116,5 @@ if __name__ == "__main__":
     login_angel_one(silent=True)
     
     logger.info("📡 Starting Telegram Polling...")
-    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+    # Infinity polling with skip_pending to avoid 409 conflict
+    bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
