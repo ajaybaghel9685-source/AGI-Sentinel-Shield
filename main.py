@@ -5,37 +5,47 @@ import telebot
 from logzero import logger
 from SmartApi import SmartConnect
 
+# Safe Gemini Import (Won't leak memory)
+import google.generativeai as genai
+
 # ==========================================
-# ⚙️ 1. ENVIRONMENT VARIABLES (THE INTEGER FIX)
+# 🎯 1. HARDCODED CONFIGURATION
 # ==========================================
+# User Command: Hardcode the exact integer Chat ID
+TELEGRAM_CHAT_ID = 9685474533
+
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-
-# 🛠️ THE FIX: Stripping hidden spaces and forcing Integer conversion
-try:
-    TELEGRAM_CHAT_ID = int(os.environ.get("TELEGRAM_CHAT_ID", "0").strip())
-except ValueError:
-    logger.error("❌ CRITICAL ERROR: TELEGRAM_CHAT_ID is invalid! Please enter numbers only in Railway Variables.")
-    TELEGRAM_CHAT_ID = 0
-
 ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY", "").strip()
 ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID", "").strip()
 ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD", "").strip()
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "").strip()
+GEMINI_KEY = os.environ.get("GEMINI_KEY", "").strip()
 
-# Initialize Telegram Bot
+# Initialize Telegram Bot & AI
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
 
-# ==========================================
-# 🛡️ 2. SAFE LOGIN ENGINE
-# ==========================================
 smartApi = None
 
-def login_angel_one():
+# ==========================================
+# 🛡️ 2. SAFE TELEGRAM SENDER (Crash-Proof)
+# ==========================================
+def safe_send_message(text):
+    """Ye function make sure karega ki agar chat not found ho, toh code crash na ho."""
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode='HTML')
+    except telebot.apihelper.ApiTelegramException as e:
+        logger.error(f"⚠️ Telegram API Error: {e}")
+        logger.warning("Did you forget to send /start to your bot in the Telegram App?")
+
+# ==========================================
+# 🔐 3. ANGEL ONE LOGIN ENGINE (Silent Mode)
+# ==========================================
+def login_angel_one(silent=False):
     global smartApi
     try:
-        # 🧹 TOTP Cleaner
         clean_totp_secret = str(ANGEL_TOTP_SECRET).replace(" ", "").replace("-", "").upper()
-        
         logger.info("⏳ Attempting Angel One Login...")
         
         totp = pyotp.TOTP(clean_totp_secret).now()
@@ -45,51 +55,47 @@ def login_angel_one():
         if login_response.get('status') == False:
             raise Exception(login_response.get('message', 'Unknown API Error'))
             
-        logger.info("✅ Angel One Login Successful!")
+        logger.info("✅ Angel One Login Successful (In Pool)!")
         
-        # Ab TELEGRAM_CHAT_ID ek pure Integer hai
-        if TELEGRAM_CHAT_ID != 0:
-            bot.send_message(TELEGRAM_CHAT_ID, "🟢 <b>SYSTEM ONLINE:</b> Angel One Login Successful!", parse_mode='HTML')
+        # 🤫 Silent Start: Boot par message nahi bhejega, crash se bachega!
+        if not silent:
+            safe_send_message("🟢 <b>SYSTEM ONLINE:</b> Angel One Login Successful!")
         return True
 
     except Exception as e:
-        error_msg = f"❌ <b>ANGEL ONE LOGIN FAILED!</b>\n\n<b>Reason:</b> {str(e)}\n\nBot is running. Send /login to retry."
-        logger.error(error_msg)
-        
-        if TELEGRAM_CHAT_ID != 0:
-            bot.send_message(TELEGRAM_CHAT_ID, error_msg, parse_mode='HTML')
+        logger.error(f"❌ ANGEL ONE LOGIN FAILED: {str(e)}")
+        if not silent:
+            safe_send_message(f"❌ <b>LOGIN FAILED:</b> {str(e)}")
         return False
 
 # ==========================================
-# 🤖 3. TELEGRAM COMMANDS
+# 🤖 4. TELEGRAM COMMANDS (Validation)
 # ==========================================
-@bot.message_handler(commands=['start', 'status'])
-def send_status(message):
-    # Using Integer Comparison now!
+@bot.message_handler(commands=['start', 'ping'])
+def check_visibility(message):
+    """Validation: Checking if the bot can 'see' you."""
     if message.chat.id != TELEGRAM_CHAT_ID: 
-        logger.warning(f"Unauthorized access attempt from Chat ID: {message.chat.id}")
+        logger.warning(f"Unauthorized ID tried to connect: {message.chat.id}")
         return
     
-    status = "🟢 Connected" if smartApi and smartApi.getfeedToken() else "🔴 Disconnected"
-    bot.reply_to(message, f"📊 <b>Bot Status:</b> Active\n📈 <b>Angel One:</b> {status}", parse_mode='HTML')
+    bot.reply_to(message, "✅ <b>I CAN SEE YOU BOSS!</b> Connection is verified and solid.", parse_mode='HTML')
 
 @bot.message_handler(commands=['login'])
 def retry_login(message):
-    if message.chat.id != TELEGRAM_CHAT_ID: 
-        return
+    if message.chat.id != TELEGRAM_CHAT_ID: return
     
-    bot.reply_to(message, "🔄 Retrying Angel One Login...")
-    login_angel_one()
+    bot.reply_to(message, "🔄 Manual Login Triggered. Connecting to Angel One...")
+    login_angel_one(silent=False) # Ab user ne request ki hai, toh silent=False
 
 # ==========================================
-# 🚀 4. KICKSTART & PERSISTENCE
+# 🚀 5. KICKSTART & PERSISTENCE
 # ==========================================
 if __name__ == "__main__":
     logger.info("⚡ Booting Hanuman Matrix Bot...")
     
-    # Auto-login on boot
-    login_angel_one()
+    # SILENT START: Boot par API hit nahi karega Telegram ko
+    login_angel_one(silent=True)
     
     logger.info("📡 Starting Telegram Polling (Infinity Mode)...")
-    # infinity_polling prevents timeout crashes
+    # Ye process ko block karke rakhega taaki container band na ho
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
