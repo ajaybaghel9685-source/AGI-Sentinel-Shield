@@ -25,7 +25,7 @@ def run_web_server():
 # 🎯 2. CONFIGURATION
 # ==========================================
 # Yahan apni purani ID rehne dein, niche code ise verify karega
-TELEGRAM_CHAT_ID = 9685474533 
+TELEGRAM_CHAT_ID = 6119855904 
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 ANGEL_API_KEY = os.environ.get("ANGEL_API_KEY", "").strip()
