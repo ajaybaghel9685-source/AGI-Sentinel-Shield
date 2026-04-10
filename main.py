@@ -1,37 +1,83 @@
 import os
-import telebot
-from SmartApi import SmartConnect
+import time
 import pyotp
+import telebot
 from logzero import logger
+from SmartApi import SmartConnect
 
-# Variables (Railway ke 'Variables' tab se matching)
-API_KEY = os.getenv("ANGEL_API_KEY")
-CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
-PWD = os.getenv("ANGEL_PASSWORD")
-TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET")
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# ==========================================
+# âš™ï¸ 1. ENVIRONMENT VARIABLES SETUP
+# ==========================================
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") # Apna Chat ID dalein taaki error DMs aa sakein
 
-bot = telebot.TeleBot(BOT_TOKEN)
+ANGEL_API_KEY = os.getenv("ANGEL_API_KEY")
+ANGEL_CLIENT_ID = os.getenv("ANGEL_CLIENT_ID")
+ANGEL_PASSWORD = os.getenv("ANGEL_PASSWORD")
+ANGEL_TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET")
 
-@bot.message_handler(commands=['start', 'login'])
-def login_angel(message):
+# Initialize Telegram Bot
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+
+# ==========================================
+# ðŸ›¡ï¸ 2. SAFE LOGIN ENGINE (Crash-Proof)
+# ==========================================
+smartApi = None
+
+def login_angel_one():
+    global smartApi
     try:
-        # Angel One connection setup
-        obj = SmartConnect(api_key=API_KEY)
-        token = pyotp.TOTP(TOTP_SECRET).now()
-        data = obj.generateSession(CLIENT_ID, PWD, token)
+        # ðŸ§¹ TOTP Cleaner: Removes spaces & forces uppercase to avoid "Non-base32" error
+        clean_totp_secret = str(ANGEL_TOTP_SECRET).replace(" ", "").replace("-", "").upper()
         
-        if data['status']:
-            bot.reply_to(message, "✅ Jai Hanuman! Angel One Login Successful. Aapka bot ab trading ke liye taiyar hai.")
-        else:
-            bot.reply_to(message, f"❌ Login Fail: {data['message']}")
+        logger.info("â³ Attempting Angel One Login...")
+        
+        # Generate current TOTP
+        totp = pyotp.TOTP(clean_totp_secret).now()
+        
+        # Connect to SmartAPI
+        smartApi = SmartConnect(api_key=ANGEL_API_KEY)
+        login_response = smartApi.generateSession(ANGEL_CLIENT_ID, ANGEL_PASSWORD, totp)
+        
+        if login_response.get('status') == False:
+            raise Exception(login_response.get('message', 'Unknown API Error'))
             
+        logger.info("âœ… Angel One Login Successful!")
+        bot.send_message(TELEGRAM_CHAT_ID, "ðŸŸ¢ <b>SYSTEM ONLINE:</b> Angel One Login Successful!", parse_mode='HTML')
+        return True
+
     except Exception as e:
-        bot.reply_to(message, f"⚠️ Error: {str(e)}")
+        error_msg = f"âŒ <b>ANGEL ONE LOGIN FAILED!</b>\n\n<b>Reason:</b> {str(e)}\n\nBot is still running. Send /login to retry."
+        logger.error(error_msg)
+        bot.send_message(TELEGRAM_CHAT_ID, error_msg, parse_mode='HTML')
+        return False
 
-@bot.message_handler(commands=['status'])
-def check_status(message):
-    bot.reply_to(message, "🤖 Hanuman-Bot (AGI-Sentinel) Online hai!")
+# ==========================================
+# ðŸ¤– 3. TELEGRAM COMMANDS
+# ==========================================
+@bot.message_handler(commands=['start', 'status'])
+def send_status(message):
+    if str(message.chat.id) != TELEGRAM_CHAT_ID: return
+    
+    status = "ðŸŸ¢ Connected" if smartApi and smartApi.getfeedToken() else "ðŸ”´ Disconnected"
+    bot.reply_to(message, f"ðŸ“Š <b>Bot Status:</b> Active\nðŸ“ˆ <b>Angel One:</b> {status}", parse_mode='HTML')
 
-# Is line se bot band nahi hoga
-bot.infinity_polling()
+@bot.message_handler(commands=['login'])
+def retry_login(message):
+    if str(message.chat.id) != TELEGRAM_CHAT_ID: return
+    
+    bot.reply_to(message, "ðŸ”„ Retrying Angel One Login...")
+    login_angel_one()
+
+# ==========================================
+# ðŸš€ 4. KICKSTART & PERSISTENCE
+# ==========================================
+if __name__ == "__main__":
+    logger.info("âš¡ Booting Hanuman Matrix Bot...")
+    
+    # Pehli baar run par automatically login try karega
+    login_angel_one()
+    
+    logger.info("ðŸ“¡ Starting Telegram Polling (Infinity Mode)...")
+    # infinity_polling Ensures bot never dies even if Telegram servers hiccup
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
