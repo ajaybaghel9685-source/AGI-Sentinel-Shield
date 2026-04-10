@@ -4,8 +4,6 @@ import pyotp
 import telebot
 from logzero import logger
 from SmartApi import SmartConnect
-
-# Safe Gemini Import
 import google.generativeai as genai
 
 # ==========================================
@@ -20,29 +18,44 @@ ANGEL_PASSWORD = os.environ.get("ANGEL_PASSWORD", "").strip()
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "").strip()
 GEMINI_KEY = os.environ.get("GEMINI_KEY", "").strip()
 
-# Initialize Telegram Bot (No crashing if token is empty during build phase)
-try:
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-except Exception as e:
-    logger.error(f"Failed to initialize Bot: {e}")
-
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
 smartApi = None
 
 # ==========================================
-# 🛡️ 2. SAFE TELEGRAM SENDER
+# 🤖 2. BOT INITIALIZATION & VERIFICATION
 # ==========================================
-def safe_send_message(text):
-    try:
-        if bot:
-            bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode='HTML')
-    except telebot.apihelper.ApiTelegramException as e:
-        logger.error(f"⚠️ Telegram API Error: {e}")
+try:
+    print("⏳ Checking Token...")
+    # FIX 1: threaded=False to prevent conflicts on Railway's small containers
+    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False)
+    
+    # FIX 3: Verify if the new token is actually working
+    bot_info = bot.get_me()
+    print(f"✅ Token Verified! Bot info: {bot_info.first_name} (@{bot_info.username})")
+except Exception as e:
+    logger.error(f"❌ CRITICAL: Failed to authenticate Bot Token. Check your TELEGRAM_BOT_TOKEN. Error: {e}")
+    # We don't exit here so the container stays alive to show the log.
+    bot = None
 
 # ==========================================
-# 🔐 3. ANGEL ONE LOGIN ENGINE
+# 🛡️ 3. SAFE TELEGRAM SENDER
+# ==========================================
+def safe_send_message(text):
+    if not bot:
+        return
+    # FIX 2: try-except block around send_message to prevent crashes
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, text, parse_mode='HTML')
+    except telebot.apihelper.ApiTelegramException as e:
+        logger.error(f"⚠️ Telegram API Error (Code: {e.error_code}): {e.description}")
+        logger.warning(f"Failed to send message to Chat ID: {TELEGRAM_CHAT_ID}. Please send /start to the bot.")
+    except Exception as e:
+        logger.error(f"⚠️ Unknown error while sending message: {e}")
+
+# ==========================================
+# 🔐 4. ANGEL ONE LOGIN ENGINE
 # ==========================================
 def login_angel_one(silent=False):
     global smartApi
@@ -70,39 +83,45 @@ def login_angel_one(silent=False):
         return False
 
 # ==========================================
-# 🤖 4. TELEGRAM COMMANDS
+# ⚡ 5. TELEGRAM COMMANDS
 # ==========================================
-@bot.message_handler(commands=['start', 'ping'])
-def check_visibility(message):
-    if message.chat.id != TELEGRAM_CHAT_ID: 
-        return
-    bot.reply_to(message, "✅ <b>I CAN SEE YOU BOSS!</b> Immortality Protocol Active.", parse_mode='HTML')
+# We must ensure 'bot' exists before registering handlers
+if bot:
+    @bot.message_handler(commands=['start', 'ping'])
+    def check_visibility(message):
+        if message.chat.id != TELEGRAM_CHAT_ID: 
+            return
+        bot.reply_to(message, "✅ <b>I CAN SEE YOU BOSS!</b> Connection is Solid.", parse_mode='HTML')
 
-@bot.message_handler(commands=['login'])
-def retry_login(message):
-    if message.chat.id != TELEGRAM_CHAT_ID: return
-    bot.reply_to(message, "🔄 Retrying Angel One Login...")
-    login_angel_one(silent=False)
+    @bot.message_handler(commands=['login'])
+    def retry_login(message):
+        if message.chat.id != TELEGRAM_CHAT_ID: return
+        bot.reply_to(message, "🔄 Retrying Angel One Login...")
+        login_angel_one(silent=False)
 
 # ==========================================
-# 🚀 5. KICKSTART & IMMORTALITY LOOP
+# 🚀 6. KICKSTART & IMMORTALITY LOOP
 # ==========================================
 if __name__ == "__main__":
     logger.info("⚡ Booting Hanuman Matrix Bot...")
     
-    # 1. Silent Boot
+    # Silent Boot
     login_angel_one(silent=True)
     
     logger.info("📡 Starting Telegram Polling (Infinity Mode)...")
     
-    # 2. THE IMMORTALITY LOOP (Railway Anti-Stop Mechanism)
+    # IMMORTALITY LOOP
     while True:
         try:
-            # infinity_polling will block execution here as long as it's running
-            bot.infinity_polling(timeout=10, long_polling_timeout=5)
+            if bot:
+                # infinity_polling works even with threaded=False
+                bot.infinity_polling(timeout=10, long_polling_timeout=5)
+            else:
+                logger.error("Bot is not initialized. Cannot start polling.")
+                time.sleep(30) # Wait longer if token is entirely invalid
         except Exception as e:
-            logger.error(f"🚨 Polling Crashed (Network Glitch?): {e}")
-            logger.info("🔄 Rebooting polling sequence in 10 seconds to keep container alive...")
+            logger.error(f"🚨 Polling Exception: {e}")
+            logger.info("🔄 Rebooting polling sequence in 10 seconds...")
             
-        # 3. CPU Breather: Ensure container doesn't get killed for maxing CPU if loop runs wild
+        # CPU Breather
         time.sleep(10)
