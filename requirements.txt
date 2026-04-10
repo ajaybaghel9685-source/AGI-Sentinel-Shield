@@ -1,7 +1,6 @@
 smartapi-python
-google-generativeai
+pyTelegramBotAPI
 logzero
-websocket-client
 pyotp
 requests
-pyTelegramBotAPI
+websocket-client
