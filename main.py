@@ -1,47 +1,59 @@
 import os
 import telebot
 import google.generativeai as genai
-# ... baaki purane imports (flask, smartapi) ...
+from flask import Flask
+import threading
 
-# 🎯 CONFIGURATION
-TELEGRAM_CHAT_ID = 6119855904 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+# 1. Configuration - Railway Variables se data uthayega
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+# Aapne GEMINI_KEY set kiya hai, code ise hi dhundhega
+G_KEY = os.environ.get("GEMINI_KEY")
+MY_CHAT_ID = 6119855904
 
-# Dono tarike se key check karega taaki technical dikkat na aaye
-GEMINI_KEY = os.environ.get("GEMINI_KEY") or os.environ.get("GEMINI_API_KEY")
-
-if GEMINI_KEY:
+# 2. Gemini AI Setup
+if G_KEY:
     try:
-        genai.configure(api_key=GEMINI_KEY.strip())
-        # 'gemini-1.5-flash' zyada fast hai aur error kam deta hai
+        genai.configure(api_key=G_KEY.strip())
+        # Fast model use kar rahe hain taaki turant jawab mile
         model = genai.GenerativeModel('gemini-1.5-flash')
     except Exception as e:
-        print(f"Gemini Setup Error: {e}")
+        print(f"Gemini Error: {e}")
 
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False)
+bot = telebot.TeleBot(TOKEN, threaded=False)
 
+# 3. Flask Server (Railway ko "Active" rakhne ke liye zaroori hai)
+app = Flask(__name__)
+@app.route('/')
+def index(): return "Bot is Online!"
+
+def run_server():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
+# 4. Message Handler (Har sawal ka jawab dene ke liye)
 @bot.message_handler(func=lambda message: True)
-def handle_all_messages(message):
-    if message.chat.id == TELEGRAM_CHAT_ID:
-        user_text = message.text.lower()
+def handle_messages(message):
+    # Sirf aapki Chat ID par reply karega (Security ke liye)
+    if message.chat.id == MY_CHAT_ID:
+        user_input = message.text
         
-        # 1. Login Command Check
-        if any(word in user_text for word in ["login", "connect", "jodo"]):
-            bot.reply_to(message, "Theek hai, Angel One se connect kar raha hoon...")
-            # login_angel_one() wala function call hoga
+        # "Ok" likhne par bolne wala system (Future update ke liye placeholder)
+        if user_input.lower() == "ok":
+            bot.reply_to(message, "Theek hai bhai, ab main bol kar bhi jawab de sakta hoon (Ready).")
             return
 
-        # 2. AI Chat (Stocks/General Sawal)
-        if GEMINI_KEY:
-            try:
-                # Bot ko instruction ki wo Hindi mein hi jawab de
-                prompt = f"Aap ek expert Indian Trading assistant hain. User ne pucha hai: '{message.text}'. Use simple Hindi mein jawab dein."
-                response = model.generate_content(prompt)
-                bot.reply_to(message, response.text)
-            except Exception as e:
-                # Agar ab bhi error aaye toh seedha bataiye kya error hai
-                bot.reply_to(message, f"❌ AI connect nahi ho raha. Error: {str(e)[:50]}")
-        else:
-            bot.reply_to(message, "⚠️ Boss, Gemini Key missing hai. Railway Variables check karein!")
+        try:
+            # AI ko instruction: Hindi mein aur trading expert ki tarah jawab de
+            instruction = f"Aap ek expert Indian assistant hain. User ka sawal: {user_input}. Iska jawab saral Hindi mein dein."
+            response = model.generate_content(instruction)
+            bot.reply_to(message, response.text)
+        except Exception as e:
+            bot.reply_to(message, "Maaf kijiyega, abhi AI connect nahi ho pa raha. Ek baar Railway mein Key check karein.")
+            print(f"Chat Error: {e}")
 
-# ... (Baaki code polling wala) ...
+# 5. Execution
+if __name__ == "__main__":
+    # Flask ko alag thread mein chalayenge
+    threading.Thread(target=run_server).start()
+    print("📡 Bot is starting... Polling active.")
+    # skip_pending=True se purane atke huye messages ignore ho jayenge
+    bot.infinity_polling(skip_pending=True)
