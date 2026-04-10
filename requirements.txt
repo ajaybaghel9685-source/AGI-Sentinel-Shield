@@ -1,6 +1,7 @@
-smartapi-python
-pyTelegramBotAPI
-logzero
-pyotp
-requests
-websocket-client
+smartapi-python>=1.4.2
+google-generativeai>=0.4.1
+pyTelegramBotAPI>=4.15.4
+websocket-client>=1.7.0
+pyotp>=2.9.0
+logzero>=1.7.0
+requests>=2.31.0
