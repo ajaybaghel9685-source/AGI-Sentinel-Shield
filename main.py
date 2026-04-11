@@ -1,114 +1,89 @@
 import os
-import time
 import threading
-import logging
-from flask import Flask
 import telebot
 import google.generativeai as genai
-
-# 🛡️ THE FIX 1: Official Google Enums import karein
-from google.generativeai.types import HarmCategory, HarmBlockThreshold 
+from flask import Flask
 
 # ==========================================
-# ⚙️ 1. CONFIGURATION & SETUP
+# 1. Environment Variables & Constants
 # ==========================================
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+ALLOWED_USER_ID = 6119855904
 
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-AUTHORIZED_USER_ID = 6119855904  # Sirf is ID ko reply milega
+# ==========================================
+# 2. Gemini API Configuration
+# ==========================================
+genai.configure(api_key=GEMINI_API_KEY)
 
-# Initialize Telegram Bot
-try:
-    bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, threaded=False)
-except Exception as e:
-    logging.error(f"❌ Telegram Token Error: {e}")
-    bot = None
+# Safety filters ko BLOCK_NONE set karna taaki trading/NISM wale sawal block na hon
+safety_settings = [
+    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+]
 
-# Initialize Gemini AI Model
-ai_model = None
-if GEMINI_API_KEY:
+# Persona/System Instruction setup
+system_instruction = (
+    "Tumhara naam 'Hanuman AI' hai. Tum hamesha polite rahoge aur user ke "
+    "sawalon ka jawab bilkul saral (simple) Hindi mein doge."
+)
+
+# Model initialize karna (gemini-1.5-flash fast aur accha hai)
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    safety_settings=safety_settings,
+    system_instruction=system_instruction
+)
+
+# ==========================================
+# 3. Telegram Bot Setup
+# ==========================================
+bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+
+@bot.message_handler(func=lambda message: True)
+def handle_all_messages(message):
+    # Security: Sirf specific User ID ko allow karein
+    if message.from_user.id != ALLOWED_USER_ID:
+        return # Baaki sabhi users ko completely ignore karega
+
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
+        # Chat history/message Gemini ko bhejna
+        response = model.generate_content(message.text)
         
-        # 🛡️ THE FIX 1: Bulletproof Safety Settings (Filters 100% OFF)
-        my_safety_settings = {
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-        }
-        
-        # Setup Model with Persona
-        ai_model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-            system_instruction="Aap ek financial aur technical expert AI hain. Aapko hamesha aasan (simple) Hindi mein jawab dena hai.",
-            safety_settings=my_safety_settings  # Enums passed here
-        )
-        logging.info("✅ Gemini AI Model Configured (Safety Filters: 100% OFF)")
+        # Bot ka reply
+        bot.reply_to(message, response.text)
     except Exception as e:
-        logging.error(f"❌ Gemini Setup Failed: {e}")
+        bot.reply_to(message, f"Maaf karna, ek error aayi hai: {str(e)}")
 
 # ==========================================
-# 🌐 2. FLASK WEB SERVER (RAILWAY KEEP-ALIVE)
+# 4. Flask Server (For Railway / Keeping Alive)
 # ==========================================
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "🚀 Hanuman AI Bot is LIVE!"
+    return "Hanuman AI Telegram Bot is Running!"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
-
-# ==========================================
-# 🤖 3. TELEGRAM BOT LOGIC
-# ==========================================
-if bot:
-    @bot.message_handler(func=lambda message: True)
-    def handle_messages(message):
-        # SECURITY CHECK: Ignore strangers
-        if message.from_user.id != AUTHORIZED_USER_ID:
-            return 
-
-        # Validate AI Configuration
-        if not ai_model or not GEMINI_API_KEY:
-            bot.reply_to(message, "⚠️ Error: Gemini API key set nahi hai.")
-            return
-
-        # 🛡️ THE FIX 2: Check if message actually has text (Avoids Photo/Sticker Crashes)
-        if not message.text:
-            bot.reply_to(message, "⚠️ Kripya mujhe sirf Text (likh kar) message bhejein.")
-            return
-
-        bot.send_chat_action(message.chat.id, 'typing')
-
-        # Get AI Response
-        try:
-            response = ai_model.generate_content(message.text)
-            bot.reply_to(message, response.text)
-        except Exception as e:
-            logging.error(f"⚠️ AI Error: {e}")
-            bot.reply_to(message, "⚠️ Jawab generate karne mein problem hui. (API Limit, Safety Block ya Network Error).")
+def run_flask_server():
+    # Port 8080 par Flask chalayen
+    app.run(host="0.0.0.0", port=8080)
 
 # ==========================================
-# 🚀 4. STARTUP LOOP
+# 5. Main Execution Thread
 # ==========================================
 if __name__ == "__main__":
-    # Start Flask Server in Background
-    threading.Thread(target=run_flask, daemon=True).start()
-
-    # Start Telegram Bot
-    if bot:
-        logging.info("📡 Starting Telegram Polling...")
-        while True:
-            try:
-                bot.infinity_polling(timeout=10, long_polling_timeout=5, skip_pending=True)
-            except Exception as e:
-                logging.error(f"🚨 Polling Error: {e}")
-                time.sleep(10)
+    # Check karein ki Environment Variables set hain ya nahi
+    if not TELEGRAM_BOT_TOKEN or not GEMINI_API_KEY:
+        print("Error: TELEGRAM_BOT_TOKEN ya GEMINI_API_KEY environment variable missing hai!")
     else:
-        logging.critical("❌ Bot start nahi ho paya. Token check karein.")
-        while True:
-            time.sleep(60) # Keep container alive for Flask
+        # Flask server ko background thread mein start karein
+        server_thread = threading.Thread(target=run_flask_server)
+        server_thread.daemon = True
+        server_thread.start()
+
+        print("Hanuman AI Bot start ho raha hai...")
+        
+        # Telegram Bot ko continuously run karein
+        bot.infinity_polling()    
