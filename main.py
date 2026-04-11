@@ -6,6 +6,9 @@ from flask import Flask
 import telebot
 import google.generativeai as genai
 
+# 🛡️ THE FIX 1: Official Google Enums import karein
+from google.generativeai.types import HarmCategory, HarmBlockThreshold 
+
 # ==========================================
 # ⚙️ 1. CONFIGURATION & SETUP
 # ==========================================
@@ -28,21 +31,21 @@ if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
         
-        # 🛡️ THE FIX: SAFETY SETTINGS (Block None for Trading/NISM Queries)
-        my_safety_settings =[
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-        ]
+        # 🛡️ THE FIX 1: Bulletproof Safety Settings (Filters 100% OFF)
+        my_safety_settings = {
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+        }
         
         # Setup Model with Persona
         ai_model = genai.GenerativeModel(
             model_name='gemini-1.5-flash',
             system_instruction="Aap ek financial aur technical expert AI hain. Aapko hamesha aasan (simple) Hindi mein jawab dena hai.",
-            safety_settings=my_safety_settings  # Safety filters disabled here!
+            safety_settings=my_safety_settings  # Enums passed here
         )
-        logging.info("✅ Gemini AI Model Configured (Safety Filters: OFF)")
+        logging.info("✅ Gemini AI Model Configured (Safety Filters: 100% OFF)")
     except Exception as e:
         logging.error(f"❌ Gemini Setup Failed: {e}")
 
@@ -74,6 +77,11 @@ if bot:
             bot.reply_to(message, "⚠️ Error: Gemini API key set nahi hai.")
             return
 
+        # 🛡️ THE FIX 2: Check if message actually has text (Avoids Photo/Sticker Crashes)
+        if not message.text:
+            bot.reply_to(message, "⚠️ Kripya mujhe sirf Text (likh kar) message bhejein.")
+            return
+
         bot.send_chat_action(message.chat.id, 'typing')
 
         # Get AI Response
@@ -82,7 +90,7 @@ if bot:
             bot.reply_to(message, response.text)
         except Exception as e:
             logging.error(f"⚠️ AI Error: {e}")
-            bot.reply_to(message, "⚠️ Jawab generate karne mein problem hui. (API Limit ya Network Error).")
+            bot.reply_to(message, "⚠️ Jawab generate karne mein problem hui. (API Limit, Safety Block ya Network Error).")
 
 # ==========================================
 # 🚀 4. STARTUP LOOP
@@ -103,4 +111,4 @@ if __name__ == "__main__":
     else:
         logging.critical("❌ Bot start nahi ho paya. Token check karein.")
         while True:
-            time.sleep(60) # Keep container alive for Flask        
+            time.sleep(60) # Keep container alive for Flask
