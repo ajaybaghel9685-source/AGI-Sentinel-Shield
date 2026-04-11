@@ -29,17 +29,30 @@ bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 # Global variable to hold SmartApi session
 smart_api = None
 
+# Angel One requires Symbol Tokens for orders. Add your required tokens here.
+SYMBOL_TOKENS = {
+    "RELIANCE": "2885",
+    "SBIN": "3045",
+    "TCS": "11536",
+    "INFY": "1594",
+    "HDFCBANK": "1333",
+    "TATASTEEL": "3499"
+}
+
 # 4. Define Bot Message Handlers
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
         "Jai Shri Ram! Welcome to Hanuman Bot. 🕉️\n\n"
-        "I am powered by Gemini 1.5 Flash. You can ask me anything!\n\n"
-        "To connect your Angel One Account, send the command:\n"
-        "/login"
+        "I am powered by Gemini 1.5 Flash. Ask me anything!\n\n"
+        "📈 *Trading Commands:*\n"
+        "/login - Connect to Angel One\n"
+        "/buy [SYMBOL] [QTY] - Place Market Buy Order (e.g., /buy SBIN 1)\n"
+        "/sell [SYMBOL] [QTY] - Place Market Sell Order (e.g., /sell SBIN 1)\n"
+        "/status - Check Funds & Orders"
     )
-    bot.reply_to(message, welcome_text)
+    bot.reply_to(message, welcome_text, parse_mode="Markdown")
 
 @bot.message_handler(commands=['login'])
 def login_angel_one(message):
@@ -51,13 +64,8 @@ def login_angel_one(message):
             bot.reply_to(message, "❌ Angel One credentials are missing in Railway Environment Variables.")
             return
 
-        # Initialize SmartConnect
         smart_api = SmartConnect(api_key=ANGEL_API_KEY)
-        
-        # Generate TOTP dynamically using the Secret key
         totp = pyotp.TOTP(ANGEL_TOTP_SECRET).now()
-        
-        # Login
         data = smart_api.generateSession(ANGEL_CLIENT_ID, ANGEL_PASSWORD, totp)
         
         if data['status']:
@@ -67,6 +75,90 @@ def login_angel_one(message):
             
     except Exception as e:
         bot.reply_to(message, f"❌ An error occurred during login: {str(e)}")
+
+def place_order(message, transaction_type):
+    global smart_api
+    if smart_api is None:
+        bot.reply_to(message, "❌ Please /login first to use trading features.")
+        return
+
+    try:
+        args = message.text.upper().split()
+        if len(args) != 3:
+            bot.reply_to(message, f"❌ Invalid format. Use: /{transaction_type.lower()} [SYMBOL] [QTY]\nExample: /{transaction_type.lower()} SBIN 1")
+            return
+
+        symbol = args[1]
+        qty = args[2]
+
+        if symbol not in SYMBOL_TOKENS:
+            bot.reply_to(message, f"❌ Symbol '{symbol}' not found in internal dictionary. Please add its token in the code.")
+            return
+
+        token = SYMBOL_TOKENS[symbol]
+
+        orderparams = {
+            "variety": "NORMAL",
+            "tradingsymbol": f"{symbol}-EQ",
+            "symboltoken": token,
+            "transactiontype": transaction_type,
+            "exchange": "NSE",
+            "ordertype": "MARKET",
+            "producttype": "INTRADAY",
+            "duration": "DAY",
+            "quantity": qty
+        }
+
+        order_id = smart_api.placeOrder(orderparams)
+        
+        if order_id:
+            bot.reply_to(message, f"✅ {transaction_type} Order Placed!\nSymbol: {symbol}\nQty: {qty}\nOrder ID: `{order_id}`", parse_mode="Markdown")
+        else:
+            bot.reply_to(message, "❌ Order failed. Please check Angel One app.")
+
+    except Exception as e:
+        bot.reply_to(message, f"❌ Order Error: {str(e)}")
+
+@bot.message_handler(commands=['buy'])
+def buy_command(message):
+    place_order(message, "BUY")
+
+@bot.message_handler(commands=['sell'])
+def sell_command(message):
+    place_order(message, "SELL")
+
+@bot.message_handler(commands=['status'])
+def status_command(message):
+    global smart_api
+    if smart_api is None:
+        bot.reply_to(message, "❌ Please /login first.")
+        return
+
+    bot.reply_to(message, "Fetching account status...")
+    try:
+        # Fetch Funds
+        rms_data = smart_api.rmsLimit()
+        net_margin = "N/A"
+        if rms_data and rms_data.get('status') and rms_data.get('data'):
+            net_margin = rms_data['data'].get('net', 'N/A')
+
+        # Fetch Active Orders
+        order_book = smart_api.orderBook()
+        active_orders = 0
+        if order_book and order_book.get('status') and order_book.get('data'):
+            for order in order_book['data']:
+                if order.get('orderstatus') in ['open', 'pending']:
+                    active_orders += 1
+
+        msg = (
+            "📊 *Account Status*\n"
+            f"💰 Available Funds: ₹{net_margin}\n"
+            f"📝 Active/Pending Orders: {active_orders}"
+        )
+        bot.reply_to(message, msg, parse_mode="Markdown")
+
+    except Exception as e:
+        bot.reply_to(message, f"❌ Error fetching status: {str(e)}")
 
 @bot.message_handler(func=lambda message: True)
 def handle_normal_chat(message):
@@ -98,4 +190,5 @@ if __name__ == '__main__':
     
     print("Starting Hanuman Telegram Bot...")
     # Start the Telegram bot loop
-    bot.infinity_polling(timeout=10, long_polling_timeout=5)     
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)       
+    
